@@ -3,6 +3,10 @@ pragma solidity ^0.4.23;
 import "zeppelin-solidity/contracts/math/SafeMath.sol";
 import "zeppelin-solidity/contracts/lifecycle/Pausable.sol";
 
+/** Note: Require in Remix
+import "github.com/OpenZeppelin/zeppelin-solidity/contracts/math/SafeMath.sol"; 
+import "github.com/OpenZeppelin/zeppelin-solidity/contracts/lifecycle/Pausable.sol"; 
+ */
 
 /**
  * @title Contract for exchanging transactions from ether to 
@@ -11,18 +15,17 @@ import "zeppelin-solidity/contracts/lifecycle/Pausable.sol";
 contract Remittance is Pausable {
     using SafeMath for uint256;
     
-    event LogSendRemitance(address indexed initiator, address receiver, uint amount, bytes32 paymentID, uint expireson);
+    event LogSendRemitance(bytes32 transKey, address indexed initiator, address indexed receiver, uint amount, uint expireson);
     event LogClaimRemittance(address indexed initiator, uint amount );
+    event LogClaimRturns(address indexed initiator, uint amount, uint expiresOn );
 
     
     struct Transaction{
-        uint ethFunds; // Ether funds
-        bytes32 puzzle; // keccak256 of the puzzle. Do i need this if i am keying with puzzle
+        uint ethFunds; // Ether funds        
         address sender; // sender address
         address receiver; // receiver address
         uint expiresOn; // expires on
-        bool processed; // Processed
-        uint returnFunds; // Returned funds
+        bool processed;                
     }
     
     mapping(bytes32 => Transaction ) public transactions;
@@ -35,73 +38,74 @@ contract Remittance is Pausable {
     
     /**
      * @dev Function for creating a remittance ccontract
-     * @param pass      Password comign off-chain
-     * @param receiver  Address of the receiver
-     * @param payID     Payment ID, should be calculated off-chain
+     * @param transKey  transKey which will be genrated off-chain by calling hashHelper() function
+     * @param receiver  Address of the receiver     
      */
-    function sendRemitance(bytes32 pass, address receiver, bytes32 payID) payable public whenNotPaused returns(bool success){
+    function sendRemitance(bytes32 transKey, address receiver) payable public whenNotPaused returns(bool success){
         require(msg.value > 0, "[ER201] Invlaid Ether value");
-        require(msg.sender != receiver, "[ER203] Remitter can not be the receiver");
-        bytes32 hashedPass = hashHelper(receiver,pass);
-        require(transactions[payID].ethFunds == 0, "[ER202] Invalid transaction"); // same password already used
-        require(!transactions[payID].processed,"[ER204] Invliad Trnsaction");
+        require(msg.sender != receiver, "[ER203] Remitter can not be the receiver");        
+        require(transactions[transKey].ethFunds == 0, "[ER202] Invalid transaction"); // same password already used
+        require(!transactions[transKey].processed,"[ER204] Invliad Trnsaction");
         uint expiresOn = block.timestamp + 50 days; // Transaction is valid till 50 days
-        transactions[payID] = Transaction(msg.value, hashedPass,msg.sender, receiver, expiresOn, false,0);
-        emit LogSendRemitance(msg.sender, receiver,msg.value, payID,expiresOn);
+        transactions[transKey] = Transaction( msg.value, msg.sender, receiver, expiresOn, false);
+        emit LogSendRemitance(transKey,msg.sender, receiver,msg.value,expiresOn);
         return true;
     }
     
     /**
      * @dev Procedure for claiming remittance
-     * @param pass  Hashed password coming from off-chain
-     * @param payID Payment iD should be calculated off-chain
+     * @param otp1 First OTP exchange with the receiver / Bob
+     * @param otp2 Seconf OTP exchanged with the exchange house / Carol
+     * @param payID Payment ID OR Voucher number
+     * @return success true in-case of successfull registration of the transaction
      **/
-    function claimRemittance(bytes32 pass,bytes32 payID) public whenNotPaused returns(bool success){
-        bytes32 hashedPass = hashHelper(msg.sender,pass); // Explicitly generating the puzzle
-        require(transactions[payID].receiver == msg.sender, "[ER204] Invalid Transaction Receiver");
-        require(transactions[payID].ethFunds > 0, "[ER204] Invalid Transaction Receiver");
-        require(transactions[payID].puzzle == hashedPass, "[ER205] Invalid password");
-        require(!transactions[payID].processed,"[ER204] Invliad Trnsaction");
-        require(transactions[payID].returnFunds == 0, "[ER209] Suspected Transaction");
+    function claimRemittance(bytes32 otp1, bytes32 otp2, bytes32 payID ) public whenNotPaused returns(bool success){        
+        bytes32 transKey = hashHelper(msg.sender,otp1, otp2, payID);
+        require(transactions[transKey].receiver == msg.sender, "[ER204] Invalid Transaction Receiver");
+        require(transactions[transKey].ethFunds > 0, "[ER204] Invalid Transaction Receiver");
+        require(!transactions[transKey].processed,"[ER204] Invliad Trnsaction");        
         uint expiresOn = block.timestamp + 50 days; 
-        if(transactions[payID].expiresOn > expiresOn ){
-            transactions[payID].returnFunds = transactions[payID].ethFunds;
-            transactions[payID].ethFunds = 0;
-            transactions[payID].processed = true;
-            return false;
-        }else{
-            uint fundsToTransfer = transactions[payID].ethFunds;
-            /* Rather than deleting the structure, we will keep the reference */
-            transactions[payID].ethFunds = 0;
-            transactions[payID].processed = true;
-            emit LogClaimRemittance(msg.sender, transactions[payID].ethFunds);
-            msg.sender.transfer(fundsToTransfer);                  
-            return true;
-        }
+        require(transactions[transKey].expiresOn < expiresOn,"[ER210] Transaction expired");
+        uint fundsToTransfer = transactions[transKey].ethFunds;
+        transactions[transKey].processed = true;
+        transactions[transKey].ethFunds = 0;
+        emit LogClaimRemittance(msg.sender, transactions[transKey].ethFunds);        
+        msg.sender.transfer(fundsToTransfer);                  
+        return true;
     }
     
     
     /**
      * @dev Procedure for returning funds to the sende in-case it is expired
-     * @param pass      password of the transactions
-     * @param payID     payment ID
-     * @param receiver  Address of the receiver
+     * @param otp1 First OTP exchange with the receiver / Bob
+     * @param otp2 Seconf OTP exchanged with the exchange house / Carol
+     * @param payID Payment ID OR Voucher number
+     * @return success true in-case of successfull registration of the transaction
      **/
-    function claimReturns(bytes32 pass, address receiver, bytes32 payID) public whenNotPaused returns(bool success){
-        bytes32 hashedPass = hashHelper(receiver,pass); // Explicitly generating the puzzle
-        require(transactions[payID].sender == msg.sender, "[ER206] Invalid address received");
-        require(transactions[payID].puzzle == hashedPass, "[ER205] Invalid password");
-        require(transactions[payID].processed,"[ER207] Transaction is under process");
-        require(transactions[payID].returnFunds > 0, "[ER208] Nothing to return");
-        msg.sender.transfer(transactions[payID].returnFunds);                  
+    function claimReturns(bytes32 otp1, bytes32 otp2, bytes32 payID) public whenNotPaused returns(bool success){
+        bytes32 transKey = hashHelper(msg.sender,otp1, otp2, payID);
+        require(transactions[transKey].sender == msg.sender, "[ER206] Invalid address received");
+        require(transactions[transKey].processed,"[ER207] Transaction is under process");
+        require(transactions[transKey].ethFunds > 0, "[ER204] Invalid Transaction Receiver");
+        uint expiresOn = block.timestamp + 50 days; // Transaction is valid till 50 days
+        require(transactions[transKey].expiresOn >= expiresOn,"Transaction is not expired");
+        uint fundsTransmit = transactions[transKey].ethFunds;
+        transactions[transKey].ethFunds = 0;
+        emit LogClaimRturns(msg.sender, fundsTransmit, transactions[transKey].expiresOn );
+        msg.sender.transfer(fundsTransmit);                  
         return true;
     }
     
     /**
      * Function for encoding puzzle sent
+     * @param receiver Receiver address
+     * @param otp1 First OTP exchange with the receiver / Bob
+     * @param otp2 Seconf OTP exchanged with the exchange house / Carol
+     * @param payID Payment ID OR Voucher number
+     * @return success true in-case of successfull registration of the transaction
      **/
-    function hashHelper(address receiver, bytes32 hashedPass) public pure returns(bytes32 puzzle){
-        return keccak256(abi.encodePacked(receiver,hashedPass));
+    function hashHelper(address receiver, bytes32 otp1, bytes32 otp2, bytes32 payID) public pure returns(bytes32 puzzle){
+        return keccak256(abi.encodePacked(receiver,otp1, otp2, payID));
     }
     
     
