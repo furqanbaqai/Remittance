@@ -23,22 +23,21 @@ contract('Remittance', function (accounts) {
         done();
     });
     /* Unit Test Case# 01: Check if contract was instanciated */
-    it("[UT01] Check if the instance exist", function (done) {
-        assert(typeof (remittanceCont), "object", "[UT001] Failure: Invalid object");
-        done();
+    it("[UT01] Check if the instance exist", function (/*done*/) {
+        assert(typeof (remittanceCont), "object", "[UT001] Failure: Invalid object");        
     });
     /* Unit test Case# 02: Check if the owner is carol / account[0] */
-    it("[UT02] Owner should be Carol", function (done) {
+    it("[UT02] Owner should be Carol", function (/*done*/) {
         // Assumption: alice have enough money
         remittanceCont.then(instance => {
             return instance.owner.call();
         }).then(owner => {
             assert(owner == carolAccount, "[UT02] Invalid Owner ID " + owner);            
-            done();
-        }).catch(done);
+            /*done();*/
+        });/*.catch(done);*/
     });
     /* Unit Test Case# 03: Send remittance transaction of 50wei from alice to bob */
-    it("[UT03] Send Remittance transaction of 50wei from alice to bob", function () {
+    it("[UT03] Send Remittance transaction of 50wei from alice to bob", function (/*done*/) {
         let instance;
         var otp1 = web3.fromAscii("7745");
         var otp2 = web3.fromAscii("8291");
@@ -49,15 +48,15 @@ contract('Remittance', function (accounts) {
             instance = _instance;            
             return web3.eth.getBalancePromise(instance.address)
         }).then(_contractBalance => {
-            contractBalance = _contractBalance.toNumber();
+            contractBalance = _contractBalance;
             return instance.hashHelper.call(bobAccount, otp1, otp2, payID);
         }).then(puzzle => {
-            return instance.sendRemitance(puzzle, bobAccount, { from: aliceAccount, value: 500 })
+            return instance.sendRemitance(puzzle, bobAccount, { from: aliceAccount, value: 400 })
         }).then(txHash => {
             return web3.eth.getBalancePromise(instance.address)
         }).then(newContBalance => {            
-            assert(newContBalance.toNumber() - contractBalance >= 500, "[UT003] Invalid balance");
-            // done();
+            assert(newContBalance.minus(contractBalance).toString(10) >= 500, "[UT003] Invalid balance");
+           /* done(); */           
         })/*.catch(done)*/;
 
     });

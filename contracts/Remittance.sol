@@ -25,7 +25,7 @@ contract Remittance is Pausable {
         address sender; // sender address
         address receiver; // receiver address
         uint expiresOn; // expires on
-        bool processed;                
+        /* bool processed;*/                
     }
     
     mapping(bytes32 => Transaction ) public transactions;
@@ -45,9 +45,9 @@ contract Remittance is Pausable {
         require(msg.value > 0, "[ER201] Invlaid Ether value");
         require(msg.sender != receiver, "[ER203] Remitter can not be the receiver");        
         require(transactions[transKey].ethFunds == 0, "[ER202] Invalid transaction"); // same password already used
-        require(!transactions[transKey].processed,"[ER204] Invliad Trnsaction");
+        /* require(!transactions[transKey].processed,"[ER204] Invliad Trnsaction"); */
         uint expiresOn = block.timestamp + 50 days; // Transaction is valid till 50 days
-        transactions[transKey] = Transaction( msg.value, msg.sender, receiver, expiresOn, false);
+        transactions[transKey] = Transaction( msg.value, msg.sender, receiver, expiresOn/*, false*/);
         emit LogSendRemitance(transKey,msg.sender, receiver,msg.value,expiresOn);
         return true;
     }
@@ -63,11 +63,11 @@ contract Remittance is Pausable {
         bytes32 transKey = hashHelper(msg.sender,otp1, otp2, payID);
         require(transactions[transKey].receiver == msg.sender, "[ER204] Invalid Transaction Receiver");
         require(transactions[transKey].ethFunds > 0, "[ER204] Invalid Transaction Receiver");
-        require(!transactions[transKey].processed,"[ER204] Invliad Trnsaction");        
+        /*require(!transactions[transKey].processed,"[ER204] Invliad Trnsaction"); */
         uint expiresOn = block.timestamp + 50 days; 
-        require(transactions[transKey].expiresOn < expiresOn,"[ER210] Transaction expired");
+        require(transactions[transKey].expiresOn > expiresOn,"[ER210] Transaction expired");
         uint fundsToTransfer = transactions[transKey].ethFunds;
-        transactions[transKey].processed = true;
+        /*transactions[transKey].processed = true;*/
         transactions[transKey].ethFunds = 0;
         emit LogClaimRemittance(msg.sender, transactions[transKey].ethFunds);        
         msg.sender.transfer(fundsToTransfer);                  
@@ -80,15 +80,16 @@ contract Remittance is Pausable {
      * @param otp1 First OTP exchange with the receiver / Bob
      * @param otp2 Seconf OTP exchanged with the exchange house / Carol
      * @param payID Payment ID OR Voucher number
+     * @param receiver Addresss of the receiver
      * @return success true in-case of successfull registration of the transaction
      **/
-    function claimReturns(bytes32 otp1, bytes32 otp2, bytes32 payID) public whenNotPaused returns(bool success){
-        bytes32 transKey = hashHelper(msg.sender,otp1, otp2, payID);
+    function claimReturns(bytes32 otp1, bytes32 otp2, bytes32 payID, address receiver) public whenNotPaused returns(bool success){
+        bytes32 transKey = hashHelper(receiver,otp1, otp2, payID);
         require(transactions[transKey].sender == msg.sender, "[ER206] Invalid address received");
-        require(transactions[transKey].processed,"[ER207] Transaction is under process");
+        /*require(transactions[transKey].processed,"[ER207] Transaction is under process");*/
         require(transactions[transKey].ethFunds > 0, "[ER204] Invalid Transaction Receiver");
         uint expiresOn = block.timestamp + 50 days; // Transaction is valid till 50 days
-        require(transactions[transKey].expiresOn >= expiresOn,"Transaction is not expired");
+        require(transactions[transKey].expiresOn < expiresOn,"Transaction is not expired");
         uint fundsTransmit = transactions[transKey].ethFunds;
         transactions[transKey].ethFunds = 0;
         emit LogClaimRturns(msg.sender, fundsTransmit, transactions[transKey].expiresOn );
@@ -104,8 +105,8 @@ contract Remittance is Pausable {
      * @param payID Payment ID OR Voucher number
      * @return success true in-case of successfull registration of the transaction
      **/
-    function hashHelper(address receiver, bytes32 otp1, bytes32 otp2, bytes32 payID) public pure returns(bytes32 puzzle){
-        return keccak256(abi.encodePacked(receiver,otp1, otp2, payID));
+    function hashHelper(address receiver, bytes32 otp1, bytes32 otp2, bytes32 payID) public view returns(bytes32 puzzle){
+        return keccak256(abi.encodePacked(this,receiver,otp1, otp2, payID));
     }
     
     
