@@ -14,13 +14,13 @@ contract('Remittance', function (accounts) {
     var aliceAccount = accounts[1];
     var bobAccount = accounts[2];
     var contractBalance;
-    beforeEach(function (done) {
-        remittanceCont = Remittance.new({
+    beforeEach(function (/* done*/) {
+        return remittanceCont = Remittance.new({
             from: carolAccount,
             gas: 3000000,
             gasvalue: 1
         });
-        done();
+        /*done();*/
     });
     /* Unit Test Case# 01: Check if contract was instanciated */
     it("[UT01] Check if the instance exist", function (/*done*/) {
@@ -29,7 +29,7 @@ contract('Remittance', function (accounts) {
     /* Unit test Case# 02: Check if the owner is carol / account[0] */
     it("[UT02] Owner should be Carol", function (/*done*/) {
         // Assumption: alice have enough money
-        remittanceCont.then(instance => {
+        return remittanceCont.then(instance => {
             return instance.owner.call();
         }).then(owner => {
             assert(owner == carolAccount, "[UT02] Invalid Owner ID " + owner);            
@@ -43,7 +43,7 @@ contract('Remittance', function (accounts) {
         var otp2 = web3.fromAscii("8291");
         var payID = web3.fromAscii("00001");
 
-        remittanceCont.then(_instance => {
+        return remittanceCont.then(_instance => {
             // Get alice and bob's balances
             instance = _instance;            
             return web3.eth.getBalancePromise(instance.address)
